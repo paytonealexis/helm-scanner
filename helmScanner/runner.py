@@ -65,7 +65,7 @@ def scan_files():
         helmscanner_logging.error("No upload destination set as RESULT_BUCKET env. Quitting.")
         exit()
     crawler = artifactHubCrawler.ArtifactHubCrawler()
-    crawlDict, totalRepos, totalPackages = crawler.crawl()
+    crawlDict, totalRepos, totalPackages = crawler.mockCrawl()
     helmscanner_logging.info(f"Crawl completed with {totalPackages} charts from {totalRepos} repositories.")
 
     crawlList = crawlDict
@@ -374,8 +374,11 @@ def _scan_org(crawlList, orgOffset):
 
 def uploadResultsPartial():
     if os.environ.get('RESULT_BUCKET'):
-        helmscanner_logging.info(f'Uploading results to {os.environ["RESULT_BUCKET"]}')
-        s3_uploader.upload_results(RESULTS_PATH, SCAN_TIME, True)
+        if os.environ["RESULT_BUCKET"] == "NONE":
+            helmscanner_logging.info(f'RESULT_BUCKET env set to NONE, Skipping uploads.')
+        else:
+            helmscanner_logging.info(f'Uploading results to {os.environ["RESULT_BUCKET"]}')
+            s3_uploader.upload_results(RESULTS_PATH, SCAN_TIME, True)
 
 def run():
     scan_files()

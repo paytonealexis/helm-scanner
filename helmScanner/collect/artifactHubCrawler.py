@@ -137,6 +137,6 @@ class ArtifactHubCrawler:
         :return totalPackages: Always zero for the mockCrawl()
         """
         crawlDict = {}
-        with open('artifactHubCrawler.crawl.pickle', 'rb') as f:
+        with open('artifactHubCrawler-smallsample-25repos.crawl.pickle', 'rb') as f:
             crawlDict = pickle.load(f)
         return crawlDict, 0, 0 
