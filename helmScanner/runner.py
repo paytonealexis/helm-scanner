@@ -384,8 +384,11 @@ def _scan_org(crawlList, orgOffset):
 
 def uploadResultsPartial():
     if os.environ.get('RESULT_BUCKET'):
-        helmscanner_logging.info(f'Uploading results to {os.environ["RESULT_BUCKET"]}')
-        s3_uploader.upload_results(RESULTS_PATH, SCAN_TIME, True)
+        if os.environ.get('RESULT_BUCKET') == "NONE":
+            helmscanner_logging.info(f'RESULT_BUCKET set to NONE. Skipping S3 upload.')
+        else: 
+            helmscanner_logging.info(f'Uploading results to {os.environ["RESULT_BUCKET"]}')
+            s3_uploader.upload_results(RESULTS_PATH, SCAN_TIME, True)
 
 def run():
     scan_files()

@@ -28,6 +28,11 @@ BC_SOURCE = "helm-scanner"
 
 
 class ImageScanner():
+
+    scanned_images = {} 
+    image_pull_errors = {}
+    twistcli_run_errors = {}
+
     def __init__(self):
         #super(ImageScanner, self).__init__()
         self.cmds = []
@@ -40,43 +45,61 @@ class ImageScanner():
             helmscanner_logging.warning("No env BC_API_KEY found")
             exit()
         self.download_twistcli(TWISTCLI_FILE_NAME,docker_image_scanning_base_url)
-        pruned = self.cli.images.prune()
-        helmscanner_logging.info(f"Pruned images: {pruned}")
+        try:
+            pruned = self.cli.images.prune()
+            helmscanner_logging.info(f"Pruned images: {pruned}")
+        except docker.errors.APIError as e:
+            pass
+
 
     def _scan_image(self, helmRepo, docker_image_id): 
-
         docker_cli = docker.from_env()
-        try:
-            img = docker_cli.images.get(docker_image_id)
-        except:
-            helmscanner_logging.info("Not found locally so pulling...")
+        imageShaFromRegistry = docker_cli.images.get_registry_data(docker_image_id).id
+        helmscanner_logging.info(f"size of scanned container list: {len(self.scanned_images)}")
+        if imageShaFromRegistry in self.scanned_images.keys():
+            helmscanner_logging.debug(f"dedupe, already scanned docker image {docker_image_id} with sha {imageShaFromRegistry}. Using existing data.")
+            self.parse_results(helmRepo, docker_image_id, imageShaFromRegistry,self.scanned_images[imageShaFromRegistry])
+        else:
             try:
-                [image,tag]=docker_image_id.split(':')
-                helmscanner_logging.info("Pulling {0}:{1}".format(image,tag))
-                img = docker_cli.images.pull(image,tag)
+                img = docker_cli.images.get(docker_image_id)
             except:
-                helmscanner_logging.info(f"Can't pull image {docker_image_id}")
-                return
-        # Create Dockerfile.  Only required for platform reporting
-        hist = img.history()
-        cmds = self._parse_history(hist)
-        cmds.reverse()
-        self._save_dockerfile(cmds, img)
-        try:
-            DOCKER_IMAGE_SCAN_RESULT_FILE_NAME = f".{img.id}.json"
-            command_args = f"./{TWISTCLI_FILE_NAME} images scan --address {self.docker_image_scanning_proxy_address} --token {self.BC_API_KEY} --details --output-file {DOCKER_IMAGE_SCAN_RESULT_FILE_NAME} {docker_image_id}".split()
-            helmscanner_logging.info("Running scan")
-            helmscanner_logging.info(command_args)
-            subprocess.run(command_args, shell=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # nosec
-            helmscanner_logging.info(f'TwistCLI ran successfully on image {docker_image_id}')
-            # if twistcli worked our json file should be there
-            if os.path.isfile(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME):
-                with open(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME) as docker_image_scan_result_file:
-                    self.parse_results(helmRepo, docker_image_id, img.id,json.load(docker_image_scan_result_file)) 
-                os.remove(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME)
-            docker_cli.images.remove(docker_image_id)
-        except Exception as e:
-            helmscanner_logging.error(f"Error running twistcli scan. Exception is {e}")
+                helmscanner_logging.info("Not found locally so pulling...")
+                try:
+                    [image,tag]=docker_image_id.split(':')
+                    helmscanner_logging.info("Pulling {0}:{1}".format(image,tag))
+                    img = docker_cli.images.pull(image,tag)
+                except:
+                    helmscanner_logging.info(f"Can't pull image {docker_image_id}")
+
+                    return
+            # Create Dockerfile.  Only required for platform reporting
+            hist = img.history()
+            cmds = self._parse_history(hist)
+            cmds.reverse()
+            self._save_dockerfile(cmds, img)
+            try:
+                DOCKER_IMAGE_SCAN_RESULT_FILE_NAME = f".{img.id}.json"
+                command_args = f"./{TWISTCLI_FILE_NAME} images scan --address {self.docker_image_scanning_proxy_address} --token {self.BC_API_KEY} --details --output-file {DOCKER_IMAGE_SCAN_RESULT_FILE_NAME} {docker_image_id}".split()
+                helmscanner_logging.info("Running TwistCLI scan")
+                helmscanner_logging.info(command_args)
+                result = subprocess.run(command_args, shell=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # nosec
+                #subprocess.run(command_args)  # nosec
+                if result.returncode != 0:
+                    helmscanner_logging.info(f'TwistCLI FAILED for image {docker_image_id}')
+                else: 
+                    helmscanner_logging.info(f'TwistCLI ran successfully on image {docker_image_id}')
+                # if twistcli worked our json file should be there
+                if os.path.isfile(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME):
+                    with open(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME) as docker_image_scan_result_file:
+                        jsonDockerImageScanResult = json.load(docker_image_scan_result_file)
+                        self.parse_results(helmRepo, docker_image_id, img.id, jsonDockerImageScanResult)
+                        self.scanned_images[img.id] = jsonDockerImageScanResult
+                        #helmscanner_logging.info(f"IN ADD: SIZE of deplist {len(self.scanned_images)}")
+                        #helmscanner_logging.info(self.scanned_images.keys())
+                    os.remove(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME)
+                docker_cli.images.remove(docker_image_id)
+            except Exception as e:
+                helmscanner_logging.error(f"Error running TwistCLI scan. Exception is {e}")
 
 
     def _scan_images(self, helmRepo, imageList): 
