@@ -15,9 +15,17 @@ import os
 import pickle
 from urllib.parse import urlparse
 
-#ArtifacrHubCrawler Imports
+# Retries and exponential backoffs
 import requests
 from requests.exceptions import HTTPError
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+from helmScanner.utils.timeoutHttpAdaptor import TimeoutHTTPAdapter
+
+from helmScanner.scan.scanner import Scanner
+from helmScanner.utils.getArgs import args
+
+
 
 class ArtifactHubCrawler:
 
@@ -36,17 +44,11 @@ class ArtifactHubCrawler:
         logger.addHandler(ch)
         self.logger = logger
 
-        try:
-            self.ARTIFACTHUB_TOKEN = os.environ['ARTIFACTHUB_TOKEN']
-        except KeyError:
-            logger.warning("No env ARTIFACTHUB_TOKEN found")
-            exit()
+        # Requests setup
+        self.http = requests.Session()
+        retries = Retry(total=3, backoff_factor=10, status_forcelist=[429, 500, 502, 503, 504])
+        self.http.mount("https://", TimeoutHTTPAdapter(max_retries=retries))
 
-        try:
-            self.ARTIFACTHUB_TOKEN_SECRET = os.environ['ARTIFACTHUB_TOKEN_SECRET']
-        except KeyError:
-            logger.warning("No env ARTIFACTHUB_TOKEN_SECRET found")
-            exit()
 
     def crawl(self):
         """
@@ -63,17 +65,17 @@ class ArtifactHubCrawler:
         crawlDict = {}
         totalPackages = 0
         reposPerRequest = 60
-        start_record = int(os.environ.get('START_RECORD',default=0))
-        max_records = int(os.environ.get('MAX_RECORDS',default=300))
-        helmscanner_logging.info("Artifacthub Helm crawler started.")
+        start_record = args.start_record
+        max_records = args.max_record
+        helmscanner_logging.info("Crawler: Artifacthub Helm crawler started.")
         try:
             currentRepo = 0
-            headers = {'X-API-KEY-ID': self.ARTIFACTHUB_TOKEN, 'X-API-KEY-SECRET': self.ARTIFACTHUB_TOKEN_SECRET}
+            headers = {'X-API-KEY-ID': args.artifacthub_token , 'X-API-KEY-SECRET': args.artifacthub_secret}
             helmscanner_logging.info("Receiving latest ArtifactHub repo results.")
-            response = requests.get(f"https://artifacthub.io/api/v1/repositories/search?offset={start_record}&limit={reposPerRequest}&kind=0", headers=headers)
+            response = self.http.get(f"https://artifacthub.io/api/v1/repositories/search?offset={start_record}&limit={reposPerRequest}&kind=0", headers=headers)
             response.raise_for_status()
             maxRepos = int(response.headers["pagination-total-count"]) if max_records > int(response.headers["pagination-total-count"]) else max_records
-            self.logger.info(f"Found max repos {maxRepos}")
+            self.logger.debug(f"Crawler: Max repos set to: {maxRepos}")
             jsonResponse = response.json()
             totalRepos = len(jsonResponse)
             # readjust maxRepos in the case we have a short list of responses returned
@@ -81,13 +83,13 @@ class ArtifactHubCrawler:
             offset = start_record + reposPerRequest
             while (maxRepos > totalRepos):
                 # Get the rest of the repos
-                response = requests.get(f"https://artifacthub.io/api/v1/repositories/search?offset={offset}&limit={reposPerRequest}&kind=0", headers=headers)
+                response = self.http.get(f"https://artifacthub.io/api/v1/repositories/search?offset={offset}&limit={reposPerRequest}&kind=0", headers=headers)
                 response.raise_for_status()
                 jsonResponse += response.json()
                 totalRepos += len(response.json())
                 offset += reposPerRequest
-
-            self.logger.info(f"Found {totalRepos} Helm repositories.")
+            self.logger.info(f"Crawler: Found {totalRepos} Helm repositories.")
+            
             for repoResult in jsonResponse:
                 thisRepoDict = {}
                 currentRepo += 1
@@ -97,12 +99,12 @@ class ArtifactHubCrawler:
                     repoOrgName = repoResult['user_alias']
                 try:
                     # Packages within a repo
-                    self.logger.info(f"{currentRepo}/{totalRepos} | Processing Repo {repoResult['name']} by {repoOrgName}")
+                    self.logger.info(f"Crawler: {currentRepo}/{totalRepos} | Processing Repo {repoResult['name']} by {repoOrgName}")
                     packagesQueryURI = f"https://artifacthub.io/api/v1/packages/search?limit=60&facets=false&kind=0&repo={repoResult['name']}"
-                    response = requests.get(packagesQueryURI, headers=headers)
+                    response = self.http.get(packagesQueryURI, headers=headers)
                     chartPackages = response.json()
                     chartPackagesInRepo = len(chartPackages['packages'])
-                    self.logger.debug(f"{currentRepo}/{totalRepos} | found {chartPackagesInRepo} packages.")
+                    self.logger.debug(f"Crawler: {currentRepo}/{totalRepos} | found {chartPackagesInRepo} packages.")
                     thisRepoDict = {"repoName": repoResult['name'], "repoOrgName": repoOrgName, "repoCrawlResultsID": currentRepo, "repoTotalPackages": chartPackagesInRepo, "repoRaw": repoResult, "repoPackages": [] }
                     currentChartPackage = 0
                     for chartPackage in chartPackages['packages']:
@@ -110,24 +112,29 @@ class ArtifactHubCrawler:
                         totalPackages +=1
                         try:
                             # Downloads and package version details for each package.
-                            response = requests.get(f"https://artifacthub.io/api/v1/packages/helm/{repoResult['name']}/{chartPackage['name']}", headers=headers)
+                            response = self.http.get(f"https://artifacthub.io/api/v1/packages/helm/{repoResult['name']}/{chartPackage['name']}", headers=headers)
                             chartVersionResponse = response.json()
-                            self.logger.debug(f"        R: {currentRepo}/{totalRepos} | P: {currentChartPackage}/{chartPackagesInRepo} | Chart {chartPackage['name']} latest version: {chartVersionResponse['version']} URL: {chartVersionResponse['content_url']}")
+                            self.logger.debug(f"**** Crawler: R: {currentRepo}/{totalRepos} | P: {currentChartPackage}/{chartPackagesInRepo} | Chart {chartPackage['name']} latest version: {chartVersionResponse['version']} URL: {chartVersionResponse['content_url']}")
                             thisRepoDict['repoPackages'].append(chartVersionResponse)
+
+                            # Kick off multi-threaded scan of chart.
+                            scanner = Scanner()
+                            scanner.scan_single_chart(chartVersionResponse, repoResult)
+                            
                         except HTTPError as http_err:
-                           helmscanner_logging.warning(f'HTTP error occurred: {http_err}')
+                           helmscanner_logging.warning(f'Crawler: HTTP error occurred: {http_err}')
                         except Exception as err:
-                            helmscanner_logging.warning(f'Other error occurred: {err}')
+                            helmscanner_logging.warning(f'Crawler: Other error occurred: {err}')
                 except HTTPError as http_err:
-                    helmscanner_logging.warning(f'HTTP error occurred: {http_err}')
+                    helmscanner_logging.warning(f'Crawler: HTTP error occurred: {http_err}')
                 except Exception as err:
-                    helmscanner_logging.warning(f'Other error occurred: {err}')
+                    helmscanner_logging.warning(f'Crawler: Other error occurred: {err}')
                 #Save this repo's packages into our main crawler dict.
                 crawlDict[currentRepo] = thisRepoDict
         except HTTPError as http_err:
-            helmscanner_logging.warning(f'HTTP error occurred: {http_err}')
+            helmscanner_logging.warning(f'Crawler: HTTP error occurred: {http_err}')
         except Exception as err:
-            helmscanner_logging.warning(f'Other error occurred: {err}')
+            helmscanner_logging.warning(f'Crawler: Other error occurred: {err}')
         with open('artifactHubCrawler.crawl.pickle', 'wb') as f:
             pickle.dump(crawlDict, f, pickle.HIGHEST_PROTOCOL)
         return crawlDict, totalRepos, totalPackages 
