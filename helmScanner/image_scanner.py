@@ -44,7 +44,7 @@ class ImageScanner():
         pruned = self.cli.images.prune()
         helmscanner_logging.info(f"ImageScanner: Pruned images: {pruned}")
 
-    def _scan_image(self, helmRepo, docker_image_id): 
+    def _scan_image(self, helmRepo, docker_image_id, scannerObject): 
 
         docker_cli = docker.from_env()
         try:
@@ -73,16 +73,16 @@ class ImageScanner():
             # if twistcli worked our json file should be there
             if os.path.isfile(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME):
                 with open(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME) as docker_image_scan_result_file:
-                    self.parse_results(helmRepo, docker_image_id, img.id,json.load(docker_image_scan_result_file)) 
+                    self.parse_results(helmRepo, docker_image_id, img.id,json.load(docker_image_scan_result_file), scannerObject) 
                 os.remove(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME)
             docker_cli.images.remove(docker_image_id)
         except Exception as e:
             helmscanner_logging.error(f"ImageScanner: Error running twistcli scan. Exception is {e}")
 
 
-    def _scan_images(self, helmRepo, imageList): 
+    def _scan_images(self, helmRepo, imageList, scannerObject): 
 
-        multithreadit(self._scan_image, helmRepo, imageList)
+        multithreadit(self._scan_image, helmRepo, imageList, scannerObject)
         return
         
     def _save_dockerfile(self,cmds, img):
@@ -128,7 +128,7 @@ class ImageScanner():
         os.chmod(cli_file_name, st.st_mode | stat.S_IEXEC)
         helmscanner_logging.info(f'ImageScanner: TwistCLI downloaded and has execute permission')
 
-    def parse_results(self, helmRepo, docker_image_name, image_id, twistcli_scan_result):
+    def parse_results(self, helmRepo, docker_image_name, image_id, twistcli_scan_result, scannerObject):
         headerRow = ['Scan Timestamp','Helm Repo','Image Name','Image Tag','Image SHA','Total', 'Critical', 'High', 'Medium','Low']
         filebase = slugify(f"{helmRepo}-{image_id[7:]}")
         filenameVulns = f"{currentRunResultsPath}/containers/{filebase}.csv"
@@ -155,6 +155,17 @@ class ImageScanner():
             helmscanner_logging.info(f'ImageScanner: Error opening CSV occured. Error was: {e}') 
         # Create Vulns Doc (if required)  
         if twistcli_scan_result['results'][0]['vulnerabilityDistribution']['total'] > 0:
+
+            for x in twistcli_scan_result['results'][0]['vulnerabilities']:
+                try:
+                    link = x['link']
+                except:
+                    link = ''
+                if x['severity'] > 5:
+                    scannerObject.chartGraph.add_node(x['id'], name=x['id'], description=x.get('description'))
+                    scannerObject.chartGraph.nodes[x['id']]['nodeType'] = "CVE"
+                    scannerObject.chartGraph.add_edge(x['id'], imageName)
+
             headerRow = ['Scan Timestamp','Helm Repo','Image Name','Image Tag','Image SHA','CVE ID', 'Status', 'Severity', 'Package Name','Package Version','Link','CVSS','Vector','Description','Risk Factors','Publish Date']           
             with open(filenameVulns, 'w') as f: 
                 write = csv.writer(f) 

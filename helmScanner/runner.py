@@ -59,9 +59,9 @@ class Runner():
         helmscanner_logging.debug(f"Global deps usage: {self.globalDepsUsage}")
         helmscanner_logging.debug(f"Global deps list {self.globalDepsList}")
 
-        result_writer.print_csv(summary_lst, result_lst, helmdeps_lst, empty_resources, self.RESULTS_PATH, repo['repoName'], orgRepoFilename, globalDepsList, globalDepsUsage)
+        #result_writer.print_csv(summary_lst, result_lst, helmdeps_lst, empty_resources, self.RESULTS_PATH, repo['repoName'], orgRepoFilename, globalDepsList, globalDepsUsage)
         #Upload and rename per org, rather than waiting till the end of the run.
-        self.uploadResultsPartial()
+        #self.uploadResultsPartial()
 
 
     def uploadResultsPartial(self):

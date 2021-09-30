@@ -22,6 +22,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from helmScanner.utils.timeoutHttpAdaptor import TimeoutHTTPAdapter
 
+from helmScanner.multithreader import singleJobQueueIt
 from helmScanner.scan.scanner import Scanner
 from helmScanner.utils.getArgs import args
 
@@ -108,17 +109,19 @@ class ArtifactHubCrawler:
                     thisRepoDict = {"repoName": repoResult['name'], "repoOrgName": repoOrgName, "repoCrawlResultsID": currentRepo, "repoTotalPackages": chartPackagesInRepo, "repoRaw": repoResult, "repoPackages": [] }
                     currentChartPackage = 0
                     for chartPackage in chartPackages['packages']:
+                        scanner = Scanner()
                         currentChartPackage += 1
                         totalPackages +=1
                         try:
                             # Downloads and package version details for each package.
                             response = self.http.get(f"https://artifacthub.io/api/v1/packages/helm/{repoResult['name']}/{chartPackage['name']}", headers=headers)
                             chartVersionResponse = response.json()
-                            self.logger.debug(f"**** Crawler: R: {currentRepo}/{totalRepos} | P: {currentChartPackage}/{chartPackagesInRepo} | Chart {chartPackage['name']} latest version: {chartVersionResponse['version']} URL: {chartVersionResponse['content_url']}")
+                            self.logger.debug(f"Crawler: R: {currentRepo}/{totalRepos} | P: {currentChartPackage}/{chartPackagesInRepo} | Chart {chartPackage['name']} latest version: {chartVersionResponse['version']} URL: {chartVersionResponse['content_url']}")
                             thisRepoDict['repoPackages'].append(chartVersionResponse)
 
                             # Kick off multi-threaded scan of chart.
-                            scanner = Scanner()
+                            # TODO: Fix broken multithreading
+                            #singleJobQueueIt(scanner.scan_single_chart,(chartVersionResponse,repoResult))
                             scanner.scan_single_chart(chartVersionResponse, repoResult)
                             
                         except HTTPError as http_err:
@@ -139,15 +142,15 @@ class ArtifactHubCrawler:
             pickle.dump(crawlDict, f, pickle.HIGHEST_PROTOCOL)
         return crawlDict, totalRepos, totalPackages 
 
-    def mockCrawl(self):
-        """
-        Loads in the latest pickled dict produced by crawl() from artifactHubCrawler.crawl.pickle' and returns the dictionary.
+    # def mockCrawl(self):
+    #     """
+    #     Loads in the latest pickled dict produced by crawl() from artifactHubCrawler.crawl.pickle' and returns the dictionary.
         
-        :return crawlDict: A dictionary of crawled and discovered HELM charts (Loaded from a pickle file) their repo details, and the local filesystem tmpdir location of the extracted chart.
-        :return totalRepos: Always zero for the mockCrawl()
-        :return totalPackages: Always zero for the mockCrawl()
-        """
-        crawlDict = {}
-        with open('artifactHubCrawler.crawl.pickle', 'rb') as f:
-            crawlDict = pickle.load(f)
-        return crawlDict, 0, 0 
+    #     :return crawlDict: A dictionary of crawled and discovered HELM charts (Loaded from a pickle file) their repo details, and the local filesystem tmpdir location of the extracted chart.
+    #     :return totalRepos: Always zero for the mockCrawl()
+    #     :return totalPackages: Always zero for the mockCrawl()
+    #     """
+    #     crawlDict = {}
+    #     with open('artifactHubCrawler.crawl.pickle', 'rb') as f:
+    #         crawlDict = pickle.load(f)
+    #     return crawlDict, 0, 0 

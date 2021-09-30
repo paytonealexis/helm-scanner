@@ -10,6 +10,12 @@ import tarfile
 import glob
 import re
 import logging as helmscanner_logging
+import networkx as nx
+import matplotlib.pyplot as plt
+from bokeh import plotting
+from bokeh.models import ColumnDataSource, LabelSet, Circle, HoverTool, TapTool, BoxSelectTool
+from bokeh.transform import factor_cmap
+
 
 from helmScanner.collect import artifactHubCrawler
 from helmScanner.output import result_writer
@@ -18,7 +24,7 @@ from helmScanner.multithreader import multithreadit
 from helmScanner.image_scanner import imageScanner
 from helmScanner.scannerTimeStamp import currentRunTimestamp
 from helmScanner.scannerTimeStamp import currentRunResultsPath
-
+from helmScanner.multithreader import getJobQueue
 
 
 # Local setup of checkov
@@ -71,21 +77,18 @@ class Scanner:
         result_lst = []
         helmdeps_lst = []
         empty_resources = {}
-        orgRepoFilename = f"{repoResult['name']}"
+        orgRepoFilename = f"{repoResult}"
         extract_failures = []
         download_failures = []
         parse_deps_failures = []
 
-        repoName = repoResult['name']
-        repoDetailsDict = repoResult
+        repoName = repoResult
 
         chartNameFromResultDataExpression = '(.*)\.(RELEASE-NAME-)?(.*)(\.default)?'
         chartNameFromResultDataExpressionGroup = 3
 
         repoChartPathName = f"{repo['name']}/{chartPackage['name']}"
-        ## DEBUG: Disable specific repo for scanning
-        #if orgRepoFilename == "reponame":
-        #    continue
+
         if True:
             helmscanner_logging.info(f"Scanner: {repo['name']}/{chartPackage['name']}| Download Source ")
             # Setup local dir and download
@@ -120,6 +123,16 @@ class Scanner:
                     helmscanner_logging.warning(f"Scanner: Error processing helm dependancies for {chartPackage['name']} at source dir: {downloadPath}/{chartPackage['name']}. Error details: {str(e, 'utf-8')}")
             chart_deps = self.parse_helm_dependency_output(o)
             helmscanner_logging.debug(chart_deps)
+
+            #Chart Graph
+            graphName = f"{repo['name']}/{chartPackage['name']}"
+            chartGraph = nx.Graph(name=graphName)
+            chartGraph.add_node(graphName, name=graphName, description=graphName)
+            chartGraph.nodes[graphName]['nodeType'] = "root"
+            
+            chartGraph.add_node("deps", name="Chart Deps")
+            chartGraph.nodes["deps"]['nodeType'] = "root"
+
             helmout = subprocess.Popen(["helm", 'template', f"{downloadPath}/{chartPackage['name']}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out, err = helmout.communicate()
             imageList = []
@@ -137,10 +150,9 @@ class Scanner:
                     imageList.append(f"{imagename}:{tag}")
             # get rid of the duplicates to save time
             imageList = list(dict.fromkeys(imageList))
-            #helmscanner_logging.info(f"Scanner: Found images: {imageList} in chart {downloadPath}/{chartPackage['name']}")
-
-            #imageScanner._scan_images(repoChartPathName, imageList) 
-            #helmscanner_logging.info(f"Scanner: Done Scanning Images {imageList} for chart: {downloadPath}/{chartPackage['name']}")
+            helmscanner_logging.info(f"Scanner: Found images: {imageList} in chart {downloadPath}/{chartPackage['name']}")
+            imageScanner._scan_images(repoChartPathName, imageList, self) 
+            helmscanner_logging.info(f"Scanner: Done Scanning Images {imageList} for chart: {downloadPath}/{chartPackage['name']}")
             
             # Assign results_scan outside of try objects.
             results_scan = object
@@ -207,6 +219,15 @@ class Scanner:
                         repo['official'],
                         repo['scanner_disabled']
                         ]
+
+                    # Failed checks add to graph by check ID grouping
+                    if f'{failed_check["check_id"]}[0]' not in chartGraph:
+                        chartGraph.add_node(failed_check["check_id"], name=failed_check["check_id"], description=failed_check["check_name"])
+                        chartGraph.nodes[failed_check["check_id"]]['nodeType'] = "checkov"
+                        chartGraph.add_edge(failed_check["check_id"], graphName)
+                    chartGraph.add_node(failed_check["resource"], name=failed_check["resource"], description=failed_check["resource"], filePath=failed_check["file_path"])
+                    chartGraph.nodes[failed_check["resource"]]['nodeType'] = "helmResource"
+                    chartGraph.add_edge(failed_check["resource"], failed_check["check_id"])
                     #check.extend(self.add_meta(scan_time))
                     result_lst.append(check)
                 if results_scan.is_empty():
@@ -331,10 +352,88 @@ class Scanner:
                             list(current_dep.values())[3]  #dep dict chart_status
                         ]
 
+                        chartGraph.add_node(chartPackage['name'], name=chartPackage['name'], description=chartPackage['name'])
+                        chartGraph.nodes[chartPackage['name']]['nodeType'] = "chart"
+                        chartGraph.add_edge(chartPackage['name'], "deps", color="red")
+
                         helmdeps_lst.append(dep_item)
                     
             except:
                 pass
+    
+        #nx.draw(chartGraph, with_labels=True)
+        #plt.savefig(f"{repo['name']}-{chartPackage['name']}.png")
+        #plt.close('all')
+
+
+
+        plot = plotting.figure(title=f"{repo['name']}-{chartPackage['name']}", plot_width=1024, plot_height=768)#, x_range=(-1.1,1.1), y_range=(-1.1,1.1))
+        plot.add_tools(HoverTool(tooltips=[("Name", "@name"), 
+                                        ("NodeType", "@nodeType"), 
+                                        ("Description", "@description")]), 
+                    TapTool(), 
+                    BoxSelectTool())
+
+
+        bokehGraph = plotting.from_networkx(chartGraph, nx.spring_layout, scale=1, center=(0,0))
+        plot.renderers.append(bokehGraph)
+
+        positions = bokehGraph.layout_provider.graph_layout
+        x, y = zip(*positions.values())
+        node_labels = nx.get_node_attributes(chartGraph, 'name')
+        #source = ColumnDataSource({'x': x, 'y': y, 'name': [node_labels[i] for i in range(len(x))]})
+        #ColumnDataSource()
+
+        bokehGraph.node_renderer.data_source.data['name'] = list(chartGraph.nodes())
+        # add club to node data
+        ## 
+        bokehGraph.node_renderer.data_source.data['nodeType'] = [i[1] for i in chartGraph.nodes(data='nodeType')]
+        bokehGraph.node_renderer.data_source.data['description'] = [i[1] for i in chartGraph.nodes(data='description')]
+
+        bokehGraph.node_renderer.data_source.data['x']=x
+        bokehGraph.node_renderer.data_source.data['y']=y
+        #bokehGraph.node_renderer.data_source.data['name']=node_labels
+        bokehGraph.node_renderer.glyph = Circle(size=20, fill_color=factor_cmap('nodeType', 'Spectral8', ['root', 'checkov', 'chart', 'helmResource', 'cve', 'CVE']))
+        labels = LabelSet(x='x', y='y', text='name', source=bokehGraph.node_renderer.data_source,
+                        background_fill_color='white')
+
+        plot.renderers.append(labels)
+
+
+        plotting.output_file(f"{repo['name']}-{chartPackage['name']}.html")
+        plotting.show(plot)
+
+
+        #Choose a title!
+# title = 'Game of Thrones Network'
+
+# #Establish which categories will appear when hovering over each node
+# HOVER_TOOLTIPS = [("Character", "@index")]
+
+# #Create a plot — set dimensions, toolbar, and title
+# plot = figure(tooltips = HOVER_TOOLTIPS,
+#               tools="pan,wheel_zoom,save,reset", active_scroll='wheel_zoom',
+#             x_range=Range1d(-10.1, 10.1), y_range=Range1d(-10.1, 10.1), title=title)
+
+# #Create a network graph object with spring layout
+# # https://networkx.github.io/documentation/networkx-1.9/reference/generated/networkx.drawing.layout.spring_layout.html
+# network_graph = from_networkx(G, networkx.spring_layout, scale=10, center=(0, 0))
+
+# #Set node size and color
+# network_graph.node_renderer.glyph = Circle(size=15, fill_color='skyblue')
+
+# #Set edge opacity and width
+# network_graph.edge_renderer.glyph = MultiLine(line_alpha=0.5, line_width=1)
+
+# #Add network graph to the plot
+# plot.renderers.append(network_graph)
+
+# show(plot)
+# #save(plot, filename=f"{title}.html")
+
+        getJobQueue().task_done()
+
+
 
    # helmscanner_logging.debug(f"Global deps usage: {globalDepsUsage}")
     #helmscanner_logging.debug(f"Global deps list {globalDepsList}")
