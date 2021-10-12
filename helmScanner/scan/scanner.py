@@ -4,6 +4,7 @@ import errno
 import sys
 from collections import defaultdict
 import subprocess
+from bokeh.models.glyphs import VArea
 import wget
 import traceback
 import tarfile
@@ -15,7 +16,8 @@ import matplotlib.pyplot as plt
 from bokeh import plotting
 from bokeh.models import ColumnDataSource, LabelSet, Circle, HoverTool, TapTool, BoxSelectTool
 from bokeh.transform import factor_cmap
-
+import yaml
+import io
 
 from helmScanner.collect import artifactHubCrawler
 from helmScanner.output import result_writer
@@ -38,6 +40,7 @@ class Scanner:
     globalDepsUsage = {}
     globalDepsList = defaultdict(list)
     emptylist = []
+    chartGraph = None
 
     def check_category(self, check_id):
         if (registry.get_check_by_id(check_id)) is not None:
@@ -67,7 +70,37 @@ class Scanner:
                         chart_dependencies.update({chart_name.rstrip():{'chart_name': chart_name.rstrip(), 'chart_version': chart_version.rstrip(), 'chart_repo': chart_repo.rstrip(), 'chart_status': chart_status.rstrip()}})
         return chart_dependencies
 
+    # def gen_dict_extract(self, key, var):
+    #     foundImages = {}
+    #     #helmscanner_logging.info((type(var)))
+    #     # if hasattr(var,'iteritems'):
+    #     #     for k, v in var.iteritems():
+    #     #         if k == key:
+    #     #             yield v
+    #     if isinstance(var, dict):
+    #          for result in self.gen_dict_extract(key, var):
+    #              foundImages.append(result)
+    #     elif isinstance(var, list):
+    #          for d in var:
+    #              for result in self.gen_dict_extract(key, d):
+    #                  foundImages.append(result)
+    #     return foundImages
 
+    def gen_dict_extract(self, key, var, foundImages=[]):
+        if hasattr(var,'items'):
+            for k, v in var.items():
+                if k == key:
+                    yield v
+                if isinstance(v, dict):
+                        #helmscanner_logging.debug(f"Found a {type(v)}. Contents: {v}")
+                        for result in self.gen_dict_extract(key, v):
+                            yield result
+
+                elif isinstance(v, list):
+                        #helmscanner_logging.debug(f"Found a {type(v)}. Contents: {v}")
+                        for d in v:
+                            for result in self.gen_dict_extract(key, d):
+                                yield result
 
     def scan_single_chart(self, chartVersionResponse, repoResult):
 
@@ -126,33 +159,54 @@ class Scanner:
 
             #Chart Graph
             graphName = f"{repo['name']}/{chartPackage['name']}"
-            chartGraph = nx.Graph(name=graphName)
-            chartGraph.add_node(graphName, name=graphName, description=graphName)
-            chartGraph.nodes[graphName]['nodeType'] = "root"
+            self.chartGraph = nx.Graph(name=graphName)
+            self.chartGraph.add_node(graphName, name=graphName, description=graphName)
+            self.chartGraph.nodes[graphName]['nodeType'] = "root"
             
-            chartGraph.add_node("deps", name="Chart Deps")
-            chartGraph.nodes["deps"]['nodeType'] = "root"
+            self.chartGraph.add_node("deps", name="Chart Deps")
+            self.chartGraph.nodes["deps"]['nodeType'] = "root"
 
             helmout = subprocess.Popen(["helm", 'template', f"{downloadPath}/{chartPackage['name']}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out, err = helmout.communicate()
             imageList = []
-            for line in out.decode('utf-8').split('\n'):
-                if 'image:' in line:
-                    line = line.replace('"', '')
-                    line = line.replace(' ', '')
-                    img=line.split(':')
-                    imagename = img[1]
-                    # if there's no tag it means "latest"
-                    if len(img) < 3:
-                        tag = "latest"
-                    else:
-                        tag = img[2]
-                    imageList.append(f"{imagename}:{tag}")
+            # for line in out.decode('utf-8').split('\n'):
+            #     if 'image:' in line:
+            #         line = line.replace('"', '')
+            #         line = line.replace(' ', '')
+            #         img=line.split(':')
+            #         imagename = img[1]
+            #         # if there's no tag it means "latest"
+            #         if len(img) < 3:
+            #             tag = "latest"
+            #         else:
+            #             tag = img[2]
+            #         imageList.append(f"{imagename}:{tag}")
+            # # get rid of the duplicates to save time
+            # imageList = list(dict.fromkeys(imageList))
+            
+            # We need the resource for each found image so we can link it to the graph on the right resource node for CVE's
+            # Read YAML file
+            for doc in yaml.safe_load_all(out.decode('utf-8')):
+                helmscanner_logging.info(f"Scanner: HELM Image Parsing. Current Object: {graphName}/{doc['kind']}/{doc['metadata']['name']}")
+                #print(doc)
+
+
+                
+                parseImageGenerator = self.gen_dict_extract('image', doc) 
+                for i in parseImageGenerator:
+                        #helmscanner_logging.debug(f"WE FOUND AN IMAGE {i}!!!!!!!!!!!!!!")
+                        img=i.split(':')
+                        imagename = img[0]
+                        # if there's no tag it means "latest"
+                        if len(img) <= 1:
+                            tag = "latest"
+                        else:
+                            tag = img[1]
+                        imageList.append({'imagename':imagename, 'tag': tag, 'resourceKind': doc['kind'], 'resourcename': doc['metadata']['name']})
+                
             # get rid of the duplicates to save time
-            imageList = list(dict.fromkeys(imageList))
-            helmscanner_logging.info(f"Scanner: Found images: {imageList} in chart {downloadPath}/{chartPackage['name']}")
-            imageScanner._scan_images(repoChartPathName, imageList, self) 
-            helmscanner_logging.info(f"Scanner: Done Scanning Images {imageList} for chart: {downloadPath}/{chartPackage['name']}")
+            #imageList = list(imageList))
+            
             
             # Assign results_scan outside of try objects.
             results_scan = object
@@ -221,13 +275,13 @@ class Scanner:
                         ]
 
                     # Failed checks add to graph by check ID grouping
-                    if f'{failed_check["check_id"]}[0]' not in chartGraph:
-                        chartGraph.add_node(failed_check["check_id"], name=failed_check["check_id"], description=failed_check["check_name"])
-                        chartGraph.nodes[failed_check["check_id"]]['nodeType'] = "checkov"
-                        chartGraph.add_edge(failed_check["check_id"], graphName)
-                    chartGraph.add_node(failed_check["resource"], name=failed_check["resource"], description=failed_check["resource"], filePath=failed_check["file_path"])
-                    chartGraph.nodes[failed_check["resource"]]['nodeType'] = "helmResource"
-                    chartGraph.add_edge(failed_check["resource"], failed_check["check_id"])
+                    if f'{failed_check["check_id"]}[0]' not in self.chartGraph:
+                        self.chartGraph.add_node(failed_check["check_id"], name=failed_check["check_id"], description=failed_check["check_name"])
+                        self.chartGraph.nodes[failed_check["check_id"]]['nodeType'] = "checkov"
+                        self.chartGraph.add_edge(failed_check["check_id"], graphName)
+                    self.chartGraph.add_node(failed_check["resource"], name=failed_check["resource"], description=failed_check["resource"], filePath=failed_check["file_path"])
+                    self.chartGraph.nodes[failed_check["resource"]]['nodeType'] = "helmResource"
+                    self.chartGraph.add_edge(failed_check["resource"], failed_check["check_id"])
                     #check.extend(self.add_meta(scan_time))
                     result_lst.append(check)
                 if results_scan.is_empty():
@@ -330,6 +384,11 @@ class Scanner:
                 ]
             summary_lst.append(summary_lst_item)
 
+            #Scan images after Checkov results added to graph. (dependancies on edges to attach too)
+            helmscanner_logging.debug(f"Scanner: Found images: {imageList} in chart {downloadPath}/{chartPackage['name']}")
+            imageScanner._scan_images(repoChartPathName, imageList, self) 
+            helmscanner_logging.info(f"Scanner: Done Scanning Images {imageList} for chart: {downloadPath}/{chartPackage['name']}")
+
             # Helm Dependancies
             try:
                 res = results_scan.get_dict()
@@ -352,16 +411,16 @@ class Scanner:
                             list(current_dep.values())[3]  #dep dict chart_status
                         ]
 
-                        chartGraph.add_node(chartPackage['name'], name=chartPackage['name'], description=chartPackage['name'])
-                        chartGraph.nodes[chartPackage['name']]['nodeType'] = "chart"
-                        chartGraph.add_edge(chartPackage['name'], "deps", color="red")
+                        self.chartGraph.add_node(chartPackage['name'], name=chartPackage['name'], description=chartPackage['name'])
+                        self.chartGraph.nodes[chartPackage['name']]['nodeType'] = "chart"
+                        self.chartGraph.add_edge(chartPackage['name'], "deps", color="red")
 
                         helmdeps_lst.append(dep_item)
                     
             except:
                 pass
     
-        #nx.draw(chartGraph, with_labels=True)
+        #nx.draw(self.chartGraph, with_labels=True)
         #plt.savefig(f"{repo['name']}-{chartPackage['name']}.png")
         #plt.close('all')
 
@@ -375,25 +434,25 @@ class Scanner:
                     BoxSelectTool())
 
 
-        bokehGraph = plotting.from_networkx(chartGraph, nx.spring_layout, scale=1, center=(0,0))
+        bokehGraph = plotting.from_networkx(self.chartGraph, nx.spring_layout, scale=1, center=(0,0))
         plot.renderers.append(bokehGraph)
 
         positions = bokehGraph.layout_provider.graph_layout
         x, y = zip(*positions.values())
-        node_labels = nx.get_node_attributes(chartGraph, 'name')
+        node_labels = nx.get_node_attributes(self.chartGraph, 'name')
         #source = ColumnDataSource({'x': x, 'y': y, 'name': [node_labels[i] for i in range(len(x))]})
         #ColumnDataSource()
 
-        bokehGraph.node_renderer.data_source.data['name'] = list(chartGraph.nodes())
+        bokehGraph.node_renderer.data_source.data['name'] = list(self.chartGraph.nodes())
         # add club to node data
         ## 
-        bokehGraph.node_renderer.data_source.data['nodeType'] = [i[1] for i in chartGraph.nodes(data='nodeType')]
-        bokehGraph.node_renderer.data_source.data['description'] = [i[1] for i in chartGraph.nodes(data='description')]
+        bokehGraph.node_renderer.data_source.data['nodeType'] = [i[1] for i in self.chartGraph.nodes(data='nodeType')]
+        bokehGraph.node_renderer.data_source.data['description'] = [i[1] for i in self.chartGraph.nodes(data='description')]
 
         bokehGraph.node_renderer.data_source.data['x']=x
         bokehGraph.node_renderer.data_source.data['y']=y
         #bokehGraph.node_renderer.data_source.data['name']=node_labels
-        bokehGraph.node_renderer.glyph = Circle(size=20, fill_color=factor_cmap('nodeType', 'Spectral8', ['root', 'checkov', 'chart', 'helmResource', 'cve', 'CVE']))
+        bokehGraph.node_renderer.glyph = Circle(size=20, fill_color=factor_cmap('nodeType', 'Spectral8', ['root', 'checkov', 'chart', 'helmResource', 'CVE']))
         labels = LabelSet(x='x', y='y', text='name', source=bokehGraph.node_renderer.data_source,
                         background_fill_color='white')
 

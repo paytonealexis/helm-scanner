@@ -17,6 +17,7 @@ from helmScanner.multithreader import multithreadit
 from helmScanner.scannerTimeStamp import currentRunTimestamp
 from helmScanner.scannerTimeStamp import currentRunResultsPath
 from helmScanner.utils.getArgs import args
+import re
 
 # Get magic from checkov to build the headers
 from checkov.common.util.data_structures_utils import merge_dicts
@@ -44,17 +45,22 @@ class ImageScanner():
         pruned = self.cli.images.prune()
         helmscanner_logging.info(f"ImageScanner: Pruned images: {pruned}")
 
-    def _scan_image(self, helmRepo, docker_image_id, scannerObject): 
+    def _scan_image(self, helmRepo, imageData, scannerObject): 
+        #imageData in the form of Dict, example:
+            # imagename: busybox
+            # tag: latest
+            # resourceKind: pod
+            # resourceName: 'RELEASE-NAME-acos-prometheus-exporter-helm-chart-test-connection'
+        docker_image_id = f"{imageData['imagename']}:{imageData['tag']}"
+
 
         docker_cli = docker.from_env()
-        try:
-            img = docker_cli.images.get(docker_image_id)
+        try:            img = docker_cli.images.get(docker_image_id)
         except:
             helmscanner_logging.info(f"ImageScanner: {docker_image_id} Not local, pulling.")
             try:
-                [image,tag]=docker_image_id.split(':')
-                helmscanner_logging.info("ImageScanner: Pulling {0}:{1}".format(image,tag))
-                img = docker_cli.images.pull(image,tag)
+                helmscanner_logging.info(f"ImageScanner: Pulling {docker_image_id}")
+                img = docker_cli.images.pull(imageData['imagename'],imageData['tag'])
             except:
                 helmscanner_logging.info(f"ImageScanner: Can't pull image {docker_image_id}")
                 return
@@ -73,7 +79,7 @@ class ImageScanner():
             # if twistcli worked our json file should be there
             if os.path.isfile(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME):
                 with open(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME) as docker_image_scan_result_file:
-                    self.parse_results(helmRepo, docker_image_id, img.id,json.load(docker_image_scan_result_file), scannerObject) 
+                    self.parse_results(helmRepo, imageData, img.id, json.load(docker_image_scan_result_file), scannerObject) 
                 os.remove(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME)
             docker_cli.images.remove(docker_image_id)
         except Exception as e:
@@ -128,12 +134,13 @@ class ImageScanner():
         os.chmod(cli_file_name, st.st_mode | stat.S_IEXEC)
         helmscanner_logging.info(f'ImageScanner: TwistCLI downloaded and has execute permission')
 
-    def parse_results(self, helmRepo, docker_image_name, image_id, twistcli_scan_result, scannerObject):
+    def parse_results(self, helmRepo, imageData, image_id, twistcli_scan_result, scannerObject):
         headerRow = ['Scan Timestamp','Helm Repo','Image Name','Image Tag','Image SHA','Total', 'Critical', 'High', 'Medium','Low']
         filebase = slugify(f"{helmRepo}-{image_id[7:]}")
         filenameVulns = f"{currentRunResultsPath}/containers/{filebase}.csv"
         filenameSummary = f"{currentRunResultsPath}/container_summaries/{filebase}_summary.csv"
-        [imageName,imageTag] = docker_image_name.split(':')
+        imageName = imageData['imagename']
+        imageTag = imageData['tag']
         # Create Summary
         try:
             with open(filenameSummary, 'w') as f: 
@@ -161,11 +168,17 @@ class ImageScanner():
                     link = x['link']
                 except:
                     link = ''
-                if x['severity'] > 5:
-                    scannerObject.chartGraph.add_node(x['id'], name=x['id'], description=x.get('description'))
-                    scannerObject.chartGraph.nodes[x['id']]['nodeType'] = "CVE"
-                    scannerObject.chartGraph.add_edge(x['id'], imageName)
-
+                if 'cvss' in x:
+                     if x['cvss'] > 5:
+                         scannerObject.chartGraph.add_node(x['id'], name=x['id'], description=x.get('description'))
+                         scannerObject.chartGraph.nodes[x['id']]['nodeType'] = "CVE"
+                         scannerObject.chartGraph.nodes[x['id']]['parentNodeResource'] = imageData['resourceKind']
+                         regex = r"RELEASE-NAME-(.*)"
+                         #test_str = "'RELEASE-NAME-acos-prometheus-exporter-helm-chart'"
+                         chartShortName = re.findall(regex, imageData['resourcename'])
+                         checkovCompatibleResourceName = f"{imageData['resourceKind']}.{imageData['resourcename']}.default (container 0) - {chartShortName[0]}"
+                         scannerObject.chartGraph.add_edge(x['id'], checkovCompatibleResourceName )
+                        #'RELEASE-NAME-acos-prometheus-exporter-helm-chart'
             headerRow = ['Scan Timestamp','Helm Repo','Image Name','Image Tag','Image SHA','CVE ID', 'Status', 'Severity', 'Package Name','Package Version','Link','CVSS','Vector','Description','Risk Factors','Publish Date']           
             with open(filenameVulns, 'w') as f: 
                 write = csv.writer(f) 

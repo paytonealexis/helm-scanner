@@ -28,14 +28,14 @@ def multiprocessit(
                     raise e
 
 def multithreadit(
-    func, key, list, num_of_workers = None
+    func, key, list, scannerObject, num_of_workers = None
 ):
     if not num_of_workers:
         num_of_workers = math.ceil(os.cpu_count() * 0.7)
         #helmscanner_logging.INFO(f"MultiThreader: Creating {num_of_workers} MT workers")
     if num_of_workers > 0:
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_of_workers) as executor:
-            futures = {executor.submit(func, key, item): item for item in list}
+            futures = {executor.submit(func, key, item, scannerObject): item for item in list}
             wait_result = concurrent.futures.wait(futures)
             if wait_result.not_done:
                 raise Exception(f"failed to perform {func.__name__}")
