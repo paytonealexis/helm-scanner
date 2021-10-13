@@ -51,6 +51,7 @@ class ImageScanner():
             # tag: latest
             # resourceKind: pod
             # resourceName: 'RELEASE-NAME-acos-prometheus-exporter-helm-chart-test-connection'
+            # 
         docker_image_id = f"{imageData['imagename']}:{imageData['tag']}"
 
 
@@ -69,26 +70,29 @@ class ImageScanner():
         cmds = self._parse_history(hist)
         cmds.reverse()
         self._save_dockerfile(cmds, img)
+        DOCKER_IMAGE_SCAN_RESULT_FILE_NAME = f".{img.id}.json"
+        command_args = f"./{self.TWISTCLI_FILE_NAME} images scan --address {self.docker_image_scanning_proxy_address} --token {self.BC_API_KEY} --details --output-file {DOCKER_IMAGE_SCAN_RESULT_FILE_NAME} {docker_image_id}".split()
+        helmscanner_logging.info(f"ImageScanner: Running scan for {docker_image_id}")
         try:
-            DOCKER_IMAGE_SCAN_RESULT_FILE_NAME = f".{img.id}.json"
-            command_args = f"./{self.TWISTCLI_FILE_NAME} images scan --address {self.docker_image_scanning_proxy_address} --token {self.BC_API_KEY} --details --output-file {DOCKER_IMAGE_SCAN_RESULT_FILE_NAME} {docker_image_id}".split()
-            helmscanner_logging.info(f"ImageScanner: Running scan for {docker_image_id}")
-            #helmscanner_logging.info(command_args) - Args have sensitive API keys, dont log.
-            subprocess.run(command_args, shell=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # nosec
-            helmscanner_logging.info(f'ImageScanner: TwistCLI ran successfully on image {docker_image_id}')
-            # if twistcli worked our json file should be there
-            if os.path.isfile(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME):
-                with open(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME) as docker_image_scan_result_file:
-                    self.parse_results(helmRepo, imageData, img.id, json.load(docker_image_scan_result_file), scannerObject) 
-                os.remove(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME)
-            docker_cli.images.remove(docker_image_id)
+            subprocess.run(command_args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # nosec
         except Exception as e:
             helmscanner_logging.error(f"ImageScanner: Error running twistcli scan. Exception is {e}")
+        helmscanner_logging.info(f'ImageScanner: TwistCLI ran successfully on image {docker_image_id}')
+        # if twistcli worked our json file should be there
+        if os.path.isfile(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME):
+            with open(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME) as docker_image_scan_result_file:
+                self.parse_results(helmRepo, imageData, img.id, json.load(docker_image_scan_result_file), scannerObject) 
+            os.remove(DOCKER_IMAGE_SCAN_RESULT_FILE_NAME)
+        else:
+            helmscanner_logging.warning(f'ImageScanner: no TwistCLI results file found for {docker_image_id}. Images and CVEs will be missing from the data.')
+        try:
+            docker_cli.images.remove(docker_image_id)
+        except:
+            pass
 
+    def _scan_images(self, helmRepo, imageData, scannerObject): 
 
-    def _scan_images(self, helmRepo, imageList, scannerObject): 
-
-        multithreadit(self._scan_image, helmRepo, imageList, scannerObject)
+        multithreadit(self._scan_image, helmRepo, imageData, scannerObject)
         return
         
     def _save_dockerfile(self,cmds, img):
@@ -168,16 +172,25 @@ class ImageScanner():
                     link = x['link']
                 except:
                     link = ''
+
+                # Normalize names to attach to checkov parts of graph.
+                normalizedResourceName = imageData['normalizedResourceName']
+                normalizedImageName = f"{imageData['imagename']}:{imageData['tag']}"
+
+                # Add Image name/detail graph objects first to attach CVE's to
+                if normalizedImageName not in scannerObject.chartGraph:
+                            scannerObject.chartGraph.add_node(normalizedImageName, name=normalizedImageName)
+                            scannerObject.chartGraph.nodes[normalizedImageName]['nodeType'] = "image"
+                            scannerObject.chartGraph.nodes[normalizedImageName]['imageVersion'] = imageData['tag']
+                            scannerObject.chartGraph.add_edge(normalizedImageName, normalizedResourceName)
+
                 if 'cvss' in x:
                      if x['cvss'] > 5:
                          scannerObject.chartGraph.add_node(x['id'], name=x['id'], description=x.get('description'))
                          scannerObject.chartGraph.nodes[x['id']]['nodeType'] = "CVE"
+                         scannerObject.chartGraph.nodes[x['id']]['cvssScore'] = x['cvss']
                          scannerObject.chartGraph.nodes[x['id']]['parentNodeResource'] = imageData['resourceKind']
-                         regex = r"RELEASE-NAME-(.*)"
-                         #test_str = "'RELEASE-NAME-acos-prometheus-exporter-helm-chart'"
-                         chartShortName = re.findall(regex, imageData['resourcename'])
-                         checkovCompatibleResourceName = f"{imageData['resourceKind']}.{imageData['resourcename']}.default (container 0) - {chartShortName[0]}"
-                         scannerObject.chartGraph.add_edge(x['id'], checkovCompatibleResourceName )
+                         scannerObject.chartGraph.add_edge(x['id'], normalizedImageName )
                         #'RELEASE-NAME-acos-prometheus-exporter-helm-chart'
             headerRow = ['Scan Timestamp','Helm Repo','Image Name','Image Tag','Image SHA','CVE ID', 'Status', 'Severity', 'Package Name','Package Version','Link','CVSS','Vector','Description','Risk Factors','Publish Date']           
             with open(filenameVulns, 'w') as f: 

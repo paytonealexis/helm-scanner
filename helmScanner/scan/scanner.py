@@ -5,6 +5,8 @@ import sys
 from collections import defaultdict
 import subprocess
 from bokeh.models.glyphs import VArea
+from checkov.runner_filter import RunnerFilter
+from networkx.algorithms.cuts import normalized_cut_size
 import wget
 import traceback
 import tarfile
@@ -168,52 +170,13 @@ class Scanner:
 
             helmout = subprocess.Popen(["helm", 'template', f"{downloadPath}/{chartPackage['name']}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out, err = helmout.communicate()
-            imageList = []
-            # for line in out.decode('utf-8').split('\n'):
-            #     if 'image:' in line:
-            #         line = line.replace('"', '')
-            #         line = line.replace(' ', '')
-            #         img=line.split(':')
-            #         imagename = img[1]
-            #         # if there's no tag it means "latest"
-            #         if len(img) < 3:
-            #             tag = "latest"
-            #         else:
-            #             tag = img[2]
-            #         imageList.append(f"{imagename}:{tag}")
-            # # get rid of the duplicates to save time
-            # imageList = list(dict.fromkeys(imageList))
-            
-            # We need the resource for each found image so we can link it to the graph on the right resource node for CVE's
-            # Read YAML file
-            for doc in yaml.safe_load_all(out.decode('utf-8')):
-                helmscanner_logging.info(f"Scanner: HELM Image Parsing. Current Object: {graphName}/{doc['kind']}/{doc['metadata']['name']}")
-                #print(doc)
 
-
-                
-                parseImageGenerator = self.gen_dict_extract('image', doc) 
-                for i in parseImageGenerator:
-                        #helmscanner_logging.debug(f"WE FOUND AN IMAGE {i}!!!!!!!!!!!!!!")
-                        img=i.split(':')
-                        imagename = img[0]
-                        # if there's no tag it means "latest"
-                        if len(img) <= 1:
-                            tag = "latest"
-                        else:
-                            tag = img[1]
-                        imageList.append({'imagename':imagename, 'tag': tag, 'resourceKind': doc['kind'], 'resourcename': doc['metadata']['name']})
-                
-            # get rid of the duplicates to save time
-            #imageList = list(imageList))
-            
-            
             # Assign results_scan outside of try objects.
             results_scan = object
             try:
                 helmscanner_logging.info(f"Scanner: {repo['name']}/{chartPackage['name']} | Running Checkov")
                 runner = helm_runner()
-                results_scan = runner.run(root_folder=downloadPath, external_checks_dir=None, files=None)
+                results_scan = runner.run(root_folder=downloadPath, external_checks_dir=None, files=None, runner_filter=RunnerFilter(skip_checks="CKV_K8S_21"))
                 res = results_scan.get_dict()
                 helmscanner_logging.info(f"Scanner: {repo['name']}/{chartPackage['name']} | Processing Checkov Results")
                 for passed_check in res["results"]["passed_checks"]:
@@ -275,13 +238,21 @@ class Scanner:
                         ]
 
                     # Failed checks add to graph by check ID grouping
-                    if f'{failed_check["check_id"]}[0]' not in self.chartGraph:
-                        self.chartGraph.add_node(failed_check["check_id"], name=failed_check["check_id"], description=failed_check["check_name"])
-                        self.chartGraph.nodes[failed_check["check_id"]]['nodeType'] = "checkov"
-                        self.chartGraph.add_edge(failed_check["check_id"], graphName)
-                    self.chartGraph.add_node(failed_check["resource"], name=failed_check["resource"], description=failed_check["resource"], filePath=failed_check["file_path"])
-                    self.chartGraph.nodes[failed_check["resource"]]['nodeType'] = "helmResource"
-                    self.chartGraph.add_edge(failed_check["resource"], failed_check["check_id"])
+                    if not "tests" in failed_check["file_path"]:
+                        if f'{failed_check["check_id"]}[0]' not in self.chartGraph:
+                            self.chartGraph.add_node(failed_check["check_id"], name=failed_check["check_id"], description=failed_check["check_name"])
+                            self.chartGraph.nodes[failed_check["check_id"]]['nodeType'] = "checkov"
+                            self.chartGraph.add_edge(failed_check["check_id"], graphName)
+                        # Normalise resource name (we already know the graph name)
+                        regex = r"([A-Za-z0-9]*)\..*-?\ ?(.*)"              
+                        normalizedResourceRegex = re.findall(regex, failed_check['resource'])
+                        if normalizedResourceRegex[0][1] is '': 
+                            normalizedResourceName = f"{normalizedResourceRegex[0][0]}.default"
+                        else:
+                            normalizedResourceName = f"{normalizedResourceRegex[0][0]}.{normalizedResourceRegex[0][1]}"
+                        self.chartGraph.add_node(normalizedResourceName, name=normalizedResourceName, description=failed_check["resource"], filePath=failed_check["file_path"])
+                        self.chartGraph.nodes[normalizedResourceName]['nodeType'] = "helmResource"
+                        self.chartGraph.add_edge(normalizedResourceName, failed_check["check_id"])
                     #check.extend(self.add_meta(scan_time))
                     result_lst.append(check)
                 if results_scan.is_empty():
@@ -382,12 +353,38 @@ class Scanner:
                     0,
                     0
                 ]
+
             summary_lst.append(summary_lst_item)
 
             #Scan images after Checkov results added to graph. (dependancies on edges to attach too)
-            helmscanner_logging.debug(f"Scanner: Found images: {imageList} in chart {downloadPath}/{chartPackage['name']}")
-            imageScanner._scan_images(repoChartPathName, imageList, self) 
-            helmscanner_logging.info(f"Scanner: Done Scanning Images {imageList} for chart: {downloadPath}/{chartPackage['name']}")
+
+            imageData = []
+            # We need the resource for each found image so we can link it to the graph on the right resource node for CVE's
+            # Read YAML file
+            for doc in yaml.safe_load_all(out.decode('utf-8')):
+                helmscanner_logging.info(f"Scanner: HELM Image Parsing. Current Object: {graphName}/{doc['kind']}/{doc['metadata']['name']}")                
+                parseImageGenerator = self.gen_dict_extract('image', doc) 
+                for i in parseImageGenerator:
+                        img=i.split(':')
+                        imagename = img[0]
+                        # if there's no tag it means "latest"
+                        if len(img) <= 1:
+                            tag = "latest"
+                        else:
+                            tag = img[1]
+                        # Normalise resource name
+                        regex = r".*\.(.*)"              
+                        normalizedResourceRegex = re.findall(regex, doc['metadata']['name'])
+                        if normalizedResourceRegex == []: 
+                            normalizedResourceName = f"{doc['kind']}.default"
+                        else:
+                            normalizedResourceName = f"{doc['kind']}.{normalizedResourceRegex[0][0]}"
+                        imageData.append({'imagename':imagename, 'tag': tag, 'resourceKind': doc['kind'], 'resourcename': doc['metadata']['name'], 'normalizedResourceName':normalizedResourceName})
+                
+        
+            helmscanner_logging.debug(f"Scanner: Found images: {imageData} in chart {downloadPath}/{chartPackage['name']}")
+            imageScanner._scan_images(repoChartPathName, imageData, self) 
+            helmscanner_logging.info(f"Scanner: Done Scanning Images {imageData} for chart: {downloadPath}/{chartPackage['name']}")
 
             # Helm Dependancies
             try:
