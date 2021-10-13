@@ -34,7 +34,6 @@ class Runner():
 
 
         SCAN_TIME = currentRunTimestamp
-        RESULTS_PATH = f'{os.path.abspath(os.path.curdir)}/results/{SCAN_TIME}'
 
         globalDepsUsage = {}
         globalDepsList = defaultdict(list)
@@ -43,7 +42,7 @@ class Runner():
 
     def run_helm_scanner(self):
 
-        for directories in ['checks', 'summaries', 'deps', 'containers', 'container_summaries', 'dockerfiles']:
+        for directories in ['checks', 'summaries', 'deps', 'containers', 'container_summaries', 'dockerfiles', 'graphs-html', 'graphs-py']:
             filename = f"results/{currentRunTimestamp}/{directories}/blah.tmp"
             if not os.path.exists(os.path.dirname(filename)):
                 try:

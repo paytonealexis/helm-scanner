@@ -38,7 +38,6 @@ from checkov.helm.runner import Runner as helm_runner
 
 class Scanner:
 
-    #Toremove
     globalDepsUsage = {}
     globalDepsList = defaultdict(list)
     emptylist = []
@@ -72,22 +71,6 @@ class Scanner:
                         chart_dependencies.update({chart_name.rstrip():{'chart_name': chart_name.rstrip(), 'chart_version': chart_version.rstrip(), 'chart_repo': chart_repo.rstrip(), 'chart_status': chart_status.rstrip()}})
         return chart_dependencies
 
-    # def gen_dict_extract(self, key, var):
-    #     foundImages = {}
-    #     #helmscanner_logging.info((type(var)))
-    #     # if hasattr(var,'iteritems'):
-    #     #     for k, v in var.iteritems():
-    #     #         if k == key:
-    #     #             yield v
-    #     if isinstance(var, dict):
-    #          for result in self.gen_dict_extract(key, var):
-    #              foundImages.append(result)
-    #     elif isinstance(var, list):
-    #          for d in var:
-    #              for result in self.gen_dict_extract(key, d):
-    #                  foundImages.append(result)
-    #     return foundImages
-
     def gen_dict_extract(self, key, var, foundImages=[]):
         if hasattr(var,'items'):
             for k, v in var.items():
@@ -112,7 +95,7 @@ class Scanner:
         result_lst = []
         helmdeps_lst = []
         empty_resources = {}
-        orgRepoFilename = f"{repoResult}"
+        orgRepoFilename = f"{repoResult['name']}"
         extract_failures = []
         download_failures = []
         parse_deps_failures = []
@@ -246,7 +229,7 @@ class Scanner:
                         # Normalise resource name (we already know the graph name)
                         regex = r"([A-Za-z0-9]*)\..*-?\ ?(.*)"              
                         normalizedResourceRegex = re.findall(regex, failed_check['resource'])
-                        if normalizedResourceRegex[0][1] is '': 
+                        if normalizedResourceRegex[0][1] == '': 
                             normalizedResourceName = f"{normalizedResourceRegex[0][0]}.default"
                         else:
                             normalizedResourceName = f"{normalizedResourceRegex[0][0]}.{normalizedResourceRegex[0][1]}"
@@ -416,12 +399,6 @@ class Scanner:
                     
             except:
                 pass
-    
-        #nx.draw(self.chartGraph, with_labels=True)
-        #plt.savefig(f"{repo['name']}-{chartPackage['name']}.png")
-        #plt.close('all')
-
-
 
         plot = plotting.figure(title=f"{repo['name']}-{chartPackage['name']}", plot_width=1024, plot_height=768)#, x_range=(-1.1,1.1), y_range=(-1.1,1.1))
         plot.add_tools(HoverTool(tooltips=[("Name", "@name"), 
@@ -432,69 +409,34 @@ class Scanner:
 
 
         bokehGraph = plotting.from_networkx(self.chartGraph, nx.spring_layout, scale=1, center=(0,0))
+
         plot.renderers.append(bokehGraph)
 
         positions = bokehGraph.layout_provider.graph_layout
         x, y = zip(*positions.values())
         node_labels = nx.get_node_attributes(self.chartGraph, 'name')
-        #source = ColumnDataSource({'x': x, 'y': y, 'name': [node_labels[i] for i in range(len(x))]})
-        #ColumnDataSource()
+
 
         bokehGraph.node_renderer.data_source.data['name'] = list(self.chartGraph.nodes())
-        # add club to node data
-        ## 
         bokehGraph.node_renderer.data_source.data['nodeType'] = [i[1] for i in self.chartGraph.nodes(data='nodeType')]
         bokehGraph.node_renderer.data_source.data['description'] = [i[1] for i in self.chartGraph.nodes(data='description')]
 
         bokehGraph.node_renderer.data_source.data['x']=x
         bokehGraph.node_renderer.data_source.data['y']=y
-        #bokehGraph.node_renderer.data_source.data['name']=node_labels
-        bokehGraph.node_renderer.glyph = Circle(size=20, fill_color=factor_cmap('nodeType', 'Spectral8', ['root', 'checkov', 'chart', 'helmResource', 'CVE']))
-        labels = LabelSet(x='x', y='y', text='name', source=bokehGraph.node_renderer.data_source,
-                        background_fill_color='white')
+        bokehGraph.node_renderer.glyph = Circle(size=20, fill_color=factor_cmap('nodeType', 'Spectral8', ['root', 'checkov', 'chart', 'helmResource', 'CVE', 'image']))
+        labels = LabelSet(x='x', y='y', text='name', source=bokehGraph.node_renderer.data_source, background_fill_color='white')
+
+
+
+
 
         plot.renderers.append(labels)
-
-
-        plotting.output_file(f"{repo['name']}-{chartPackage['name']}.html")
+        plotting.output_file(f"{currentRunResultsPath}/graphs-html/{repo['name']}-{chartPackage['name']}.html")
         plotting.show(plot)
+        #helmscanner_logging.debug(f"Global deps usage: {globalDepsUsage}")
+        #helmscanner_logging.debug(f"Global deps list {globalDepsList}")
 
-
-        #Choose a title!
-# title = 'Game of Thrones Network'
-
-# #Establish which categories will appear when hovering over each node
-# HOVER_TOOLTIPS = [("Character", "@index")]
-
-# #Create a plot — set dimensions, toolbar, and title
-# plot = figure(tooltips = HOVER_TOOLTIPS,
-#               tools="pan,wheel_zoom,save,reset", active_scroll='wheel_zoom',
-#             x_range=Range1d(-10.1, 10.1), y_range=Range1d(-10.1, 10.1), title=title)
-
-# #Create a network graph object with spring layout
-# # https://networkx.github.io/documentation/networkx-1.9/reference/generated/networkx.drawing.layout.spring_layout.html
-# network_graph = from_networkx(G, networkx.spring_layout, scale=10, center=(0, 0))
-
-# #Set node size and color
-# network_graph.node_renderer.glyph = Circle(size=15, fill_color='skyblue')
-
-# #Set edge opacity and width
-# network_graph.edge_renderer.glyph = MultiLine(line_alpha=0.5, line_width=1)
-
-# #Add network graph to the plot
-# plot.renderers.append(network_graph)
-
-# show(plot)
-# #save(plot, filename=f"{title}.html")
-
-        getJobQueue().task_done()
-
-
-
-   # helmscanner_logging.debug(f"Global deps usage: {globalDepsUsage}")
-    #helmscanner_logging.debug(f"Global deps list {globalDepsList}")
-
-    #result_writer.print_csv(summary_lst, result_lst, helmdeps_lst, empty_resources, currentRunResultsPath, repo['name'], orgRepoFilename, globalDepsList, globalDepsUsage)
+        result_writer.print_csv(summary_lst, result_lst, helmdeps_lst, empty_resources, currentRunResultsPath, repo['name'], orgRepoFilename) #,globalDepsList, globalDepsUsage)
     #Upload and rename per org, rather than waiting till the end of the run.
     #uploadResultsPartial()
 

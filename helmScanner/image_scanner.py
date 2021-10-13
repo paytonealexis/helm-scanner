@@ -205,12 +205,13 @@ class ImageScanner():
                     riskFactorRemoteExecution = 0
                     riskFactorHasFix = 0
                     riskFactorRecentVuln = 0
-                    if "remote execution" in x.get('riskFactors'):
-                        riskFactorRemoteExecution = 1
-                    if "Recent vulnerability" in x.get('riskFactors'):
-                        riskFactorRecentVuln = 1
-                    if "has fix" in x.get('riskFactors'):
-                        riskFactorHasFix = 1
+                    if 'riskFactors' in x:
+                        if "remote execution" in x.get('riskFactors'):
+                            riskFactorRemoteExecution = 1
+                        if "Recent vulnerability" in x.get('riskFactors'):
+                            riskFactorRecentVuln = 1
+                        if "has fix" in x.get('riskFactors'):
+                            riskFactorHasFix = 1
 
                     row = [
                         currentRunTimestamp,
