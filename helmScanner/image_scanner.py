@@ -192,7 +192,7 @@ class ImageScanner():
                          scannerObject.chartGraph.nodes[x['id']]['parentNodeResource'] = imageData['resourceKind']
                          scannerObject.chartGraph.add_edge(x['id'], normalizedImageName )
                         #'RELEASE-NAME-acos-prometheus-exporter-helm-chart'
-            headerRow = ['Scan Timestamp','Helm Repo','Image Name','Image Tag','Image SHA','CVE ID', 'Status', 'Severity', 'Package Name','Package Version','Link','CVSS','Vector','Description','Risk Factors','Publish Date']           
+            headerRow = ['Scan Timestamp','Helm Repo','Image Name','Image Tag','Image SHA','CVE ID', 'Status', 'Severity', 'Package Name','Package Version','Link','CVSS','Vector','Description','Risk Factors','Publish Date','Is Remote Execution','Is Recent Vulnerability','CVE Has Fix']           
             with open(filenameVulns, 'w') as f: 
                 write = csv.writer(f) 
                 write.writerow(headerRow) 
@@ -201,6 +201,17 @@ class ImageScanner():
                         link = x['link']
                     except:
                         link = ''
+
+                    riskFactorRemoteExecution = 0
+                    riskFactorHasFix = 0
+                    riskFactorRecentVuln = 0
+                    if "remote execution" in x.get('riskFactors'):
+                        riskFactorRemoteExecution = 1
+                    if "Recent vulnerability" in x.get('riskFactors'):
+                        riskFactorRecentVuln = 1
+                    if "has fix" in x.get('riskFactors'):
+                        riskFactorHasFix = 1
+
                     row = [
                         currentRunTimestamp,
                         helmRepo,
@@ -217,7 +228,10 @@ class ImageScanner():
                         x.get('vector'),
                         x.get('description'),
                         x.get('riskFactors'),
-                        (datetime.now() - timedelta(days=x.get('publishedDays', 0))).isoformat() ]
+                        (datetime.now() - timedelta(days=x.get('publishedDays', 0))).isoformat(),
+                        riskFactorRemoteExecution,
+                        riskFactorRecentVuln,
+                        riskFactorHasFix ]
                     write.writerow(row) 
 
 
