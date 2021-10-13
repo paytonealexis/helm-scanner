@@ -81,7 +81,6 @@ class ArtifactHubCrawler:
             self.logger.debug(f"Crawler: Max repos set to: {reposToProcess}. API reports {totalReposFromAPI} repos.")
             jsonResponse = response.json()
             totalReposReceived = len(jsonResponse)
-            # readjust maxRepos in the case we have a short list of responses returned
             reposToProcess = reposToProcess - totalReposReceived       
             offset = start_record + totalReposReceived
             while (reposToProcess > 0):
