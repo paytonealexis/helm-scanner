@@ -77,7 +77,6 @@ class ArtifactHubCrawler:
             response.raise_for_status()
             totalReposFromAPI = int(response.headers["pagination-total-count"])
             reposToProcess = totalReposFromAPI if max_records > totalReposFromAPI else max_records
-            #maxRepos = int(response.headers["pagination-total-count"]) if max_records > int(response.headers["pagination-total-count"]) else max_records
             self.logger.debug(f"Crawler: Max repos set to: {reposToProcess}. API reports {totalReposFromAPI} repos.")
             jsonResponse = response.json()
             totalReposReceived = len(jsonResponse)
