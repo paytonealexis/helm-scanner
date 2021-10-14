@@ -92,7 +92,10 @@ class ImageScanner():
 
     def _scan_images(self, helmRepo, imageData, scannerObject): 
 
-        multithreadit(self._scan_image, helmRepo, imageData, scannerObject)
+        for image in imageData:
+            self._scan_image(helmRepo, image, scannerObject)
+        #multithreadit(self._scan_image, helmRepo, imageData, scannerObject)
+        #Multithreading causes broken twistcli binary update race condition in /var/folders/1_/ncdcyrzx4dg8_yl6cs18jbqm0000gn/T/twistcli 
         return
         
     def _save_dockerfile(self,cmds, img):

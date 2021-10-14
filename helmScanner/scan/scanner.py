@@ -129,6 +129,7 @@ class Scanner:
             except:
                 helmscanner_logging.error(f"Scanner: Failed to download {repo['name']}/{chartPackage['name']}")
                 download_failures.append([f"{repo['name']}/{chartPackage['name']}"])
+                return 
         
 
             helmscanner_logging.info(f"Scanner: {repo['name']}/{chartPackage['name']} | Processing Chart Deps")

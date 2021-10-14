@@ -66,7 +66,7 @@ class ArtifactHubCrawler:
         crawlDict = {}
         totalPackages = 0
         reposPerRequest = 60 #API Limit
-        start_record = args.start_record
+        start_record = int(args.start_record)
         max_records = args.max_record
         helmscanner_logging.info("Crawler: Artifacthub Helm crawler started.")
         try:
@@ -82,7 +82,7 @@ class ArtifactHubCrawler:
             totalReposReceived = len(jsonResponse)
             reposToProcess = reposToProcess - totalReposReceived       
             offset = start_record + totalReposReceived
-            while (reposToProcess > 0):
+            while ((reposToProcess - start_record) > 0):
                 # Get the rest of the repos
                 response = self.http.get(f"https://artifacthub.io/api/v1/repositories/search?offset={offset}&limit={reposPerRequest}&kind=0", headers=headers)
                 response.raise_for_status()

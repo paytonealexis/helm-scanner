@@ -55,8 +55,8 @@ class Runner():
         crawlDict, totalRepos, totalPackages = crawler.crawl()
         #helmscanner_logging.info(f"Runner: Crawl completed with {totalPackages} charts from {totalRepos} repositories.")
 
-        helmscanner_logging.debug(f"Global deps usage: {self.globalDepsUsage}")
-        helmscanner_logging.debug(f"Global deps list {self.globalDepsList}")
+        #helmscanner_logging.debug(f"Global deps usage: {self.globalDepsUsage}")
+        #helmscanner_logging.debug(f"Global deps list {self.globalDepsList}")
 
         #result_writer.print_csv(summary_lst, result_lst, helmdeps_lst, empty_resources, self.RESULTS_PATH, repo['repoName'], orgRepoFilename, globalDepsList, globalDepsUsage)
         #Upload and rename per org, rather than waiting till the end of the run.
