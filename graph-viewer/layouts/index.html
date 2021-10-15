@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="{{ .Site.LanguageCode }}">
+
+  {{ partial "head.html" . }}
+
+  <body>
+
+    <div id="all">
+
+        <header>
+            
+          {{ partial "nav.html" . }}
+
+        </header>
+
+        <div id="content">
+          <div class="container">
+              <div class="row">
+
+                  <div class="col-md-12" id="graph-listing-medium">
+
+                      {{ $paginator := .Paginate (where .Site.RegularPages "Type" "graph") }}
+                      {{ range $paginator.Pages }}
+                      <section class="post">
+                          <div class="row">
+                              <div class="col-md-3">
+                                <div class="image">
+                                    <a href="{{ .Permalink }}">
+                                        <img src="{{ .Site.BaseURL}}img/helm.png" class="img-responsive" alt="{{ .Title }}">
+                                    </a>
+                                </div>
+                              </div>
+                              <div class="col-md-9">
+                                  <h2><a href="{{ .Permalink }}">{{ .Title }}</a></h2>
+                                  <div class="clearfix">
+                                      <p class="author-category">
+                                        {{ range $index, $element := .Params.tags }}{{ if gt $index 0 }}, {{ end }}<a href="{{ $.Site.BaseURL }}tags/{{ $element | urlize | lower }}">{{ $element }}</a>{{ end }}
+                                      </p>
+                                  </div>
+                                  <p class="read-more"><a href="{{ .Permalink }}" class="btn btn-template-main">{{ i18n "continueReading" }}</a>
+                                  </p>
+                              </div>
+                          </div>
+                      </section>
+                      {{ end }}
+
+                      <ul class="pager">
+                          {{ if .Paginator.HasPrev }}
+                          <li class="previous"><a href="{{ .Paginator.Prev.URL }}">&larr; {{ i18n "newer" }}</a></li>
+                          {{ else }}
+                          <li class="previous disabled"><a href="#">&larr; {{ i18n "newer" }}</a></li>
+                          {{ end }}
+
+                          {{ if .Paginator.HasNext }}
+                          <li class="next"><a href="{{ .Paginator.Next.URL }}">{{ i18n "older" }} &rarr;</a></li>
+                          {{ else }}
+                          <li class="next disabled"><a href="#">{{ i18n "older" }} &rarr;</a></li>
+                          {{ end }}
+                      </ul>
+                  </div>
+
+              </div>
+          </div>
+      </div>
+
+      {{ partial "footer.html" . }}
+
+    </div>
+
+    {{ partial "scripts.html" . }}
+
+  </body>
+</html>

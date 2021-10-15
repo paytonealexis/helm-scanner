@@ -2,3 +2,5 @@
 artifacthub-crawler.log
 artifacthub-crawler.log.*
 *.pickle
+resources/
+.DS_Store

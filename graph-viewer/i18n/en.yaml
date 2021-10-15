@@ -1,0 +1,38 @@
+- id: navHome
+  translation: "go to HELM listings"
+
+- id: navToggle
+  translation: "Toggle Navigation"
+
+- id: searchTitle
+  translation: "Search for Charts, CVE's or CKV Checks"
+
+- id: continueReading
+  translation: "View BlastRadius Graph"
+
+- id: authorBy
+  translation: "By"
+
+- id: newer
+  translation: "Previous Page"
+
+- id: older
+  translation: "Next Page"
+
+- id: home
+  translation: "Home"
+
+- id: about
+  translation: "About"
+
+- id: contact
+  translation: "Contact"
+
+- id: search
+  translation: "Search"
+
+- id: navigate
+  translation: "Navigate"
+
+- id: subscribe
+  translation: "Subscribe"

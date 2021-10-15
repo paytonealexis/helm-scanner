@@ -1,0 +1,11 @@
+@font-face {
+    font-family: 'dejavu_sansbook';
+    src: url('../webfonts/DejaVuSans-webfont.eot');
+    src: url('../webfonts/DejaVuSans-webfont.eot?#iefix') format('embedded-opentype'),
+         url('../webfonts/DejaVuSans-webfont.woff') format('woff'),
+         url('../webfonts/DejaVuSans-webfont.ttf') format('truetype'),
+         url('../webfonts/DejaVuSans-webfont.svg#dejavu_sansbook') format('svg');
+    font-weight: normal;
+    font-style: normal;
+}
+

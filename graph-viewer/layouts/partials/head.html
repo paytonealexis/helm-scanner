@@ -1,0 +1,51 @@
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="all,follow">
+  <meta name="googlebot" content="index,follow,snippet,archive">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }}</title>
+  <meta name="author" content="{{ .Site.Author.name }}" />
+
+  {{ if .Keywords }}
+  <meta name="keywords" content="{{ delimit .Keywords ", " }}">
+  {{ else if .Site.Params.DefaultKeywords }}
+  <meta name="keywords" content="{{ delimit .Site.Params.DefaultKeywords ", " }}">	
+  {{ end }}
+
+  {{ if .Description }}
+  <meta name="description" content="{{ .Description }}">
+  {{ else if .Site.Params.DefaultDescription }}
+  <meta name="description" content="{{ .Site.Params.DefaultDescription }}">	
+  {{ end }}
+
+  {{ hugo.Generator }}
+
+  {{ $fontawesome := resources.Get "font/font-awesome/css/all.css" }}
+  {{ $bootstrap := resources.Get "css/bootstrap.min.css" }}
+  {{ $fancybox := resources.Get "css/jquery.fancybox.min.css" }}
+  {{ $dejavusans := resources.Get "font/DejaVuSans/stylesheet.css" }}
+  {{ $style := resources.Get "sass/style.scss" | resources.ToCSS }}
+  
+  {{ $css := slice $fontawesome $bootstrap $fancybox $dejavusans $style | resources.Concat "css/bundle/bundle.css" | resources.Minify }}
+  <link rel="stylesheet" href="{{ $css.Permalink }}" type="text/css">
+
+  <!-- Favicon and apple touch icons-->
+  <link rel="shortcut icon" href="{{ .Site.BaseURL }}img/favicon.ico" type="image/x-icon" />
+
+  <link rel="apple-touch-icon" sizes="76x76" href="{{ .Site.BaseURL }}img/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ .Site.BaseURL }}img/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ .Site.BaseURL }}img/favicon-16x16.png">
+  <link rel="manifest" href="{{ .Site.BaseURL }}img/site.webmanifest">
+  <link rel="mask-icon" href="{{ .Site.BaseURL }}img/safari-pinned-tab.svg" color="#5bbad5">
+  <meta name="msapplication-TileColor" content="#2d89ef">
+  <meta name="theme-color" content="#ffffff">
+
+  <link rel="alternate" href="{{ "/index.xml" | absURL }}" type="application/rss+xml" title="{{ .Site.Title }}">
+
+  <!-- Facebook OpenGraph tags -->
+  <meta property="og:title" content="{{ .Title }}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="{{ .Permalink }}/" />
+  <meta property="og:image" content="{{ .Site.Params.logo }}" />
+
+</head>

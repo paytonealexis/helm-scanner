@@ -1,0 +1,9 @@
+{{- $.Scratch.Add "index" slice -}}
+
+{{- range where .Site.Pages "Type" "in"  (slice "graph") -}}
+    {{ if ne (len .Summary) 0 }}
+        {{- $.Scratch.Add "index" (dict "uri" .Permalink "title" .Title "tags" .Params.tags) -}}
+    {{- end -}}
+{{- end -}}
+
+{{- $.Scratch.Get "index" | jsonify -}}

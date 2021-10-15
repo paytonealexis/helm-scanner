@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="{{ .Site.LanguageCode }}">
+
+{{ partial "head.html" . }}
+
+<body>
+
+    <div id="all">
+
+        <header>
+
+            {{ partial "nav.html" . }}
+
+        </header>
+
+        {{ partial "breadcrumbs.html" . }}
+
+        <div id="content">
+            <div class="container">
+
+                <div class="row">
+
+                    <div class="col-md-12">
+
+                        {{ partial "widgets/search.html" . }}
+
+                        <div id="graph-listing-medium"></div>
+
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+        {{ partial "footer.html" . }}
+
+    </div>
+
+    {{ partial "scripts.html" . }}
+
+</body>
+
+</html>

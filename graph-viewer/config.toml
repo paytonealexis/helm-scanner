@@ -1,0 +1,62 @@
+baseurl = "https://bridgecrewio.github.io/helm-scanner/"
+title = "helm-scanner"
+languageCode = "en-us"
+defaultContentLanguage = "en"
+# Disqus shortname
+disqusShortname = ""
+# Google Analytics tracking code
+googleAnalytics = ""
+
+# Define the number of posts per page
+paginate = 5
+
+enableRobotsTXT = true
+
+[author]
+  homepage = "https://bridgecrewio.github.io/helm-scanner/"
+  name = "Matt Johnson"
+
+
+[menu]
+
+# Main menu
+
+#[[menu.main]]
+#    name = "graphs"
+#    url  = "/graphs/"
+#    weight = 1
+#    pre = ""
+
+[[menu.main]]
+    name = "search"
+    url  = "/search/"
+    weight = 2
+    pre = "<i class='fas fa-search'></i>"
+
+[params]
+    defaultDescription = "View blast-radius graphs for public artifacthub.io HELM charts"
+    mainSections = ["graphs"]
+
+    # Format dates with Go's time formatting
+    date_format = "October 15, 2021"
+
+[Permalinks]
+    graphs = "/:filename/"
+
+[outputs]
+  home = ["HTML", "JSON", "RSS"]
+  blog = ["HTML", "JSON", "RSS"]
+
+[privacy]
+  [privacy.disqus]
+    disable = true
+  [privacy.googleAnalytics]
+    disable = true
+  [privacy.instagram]
+    disable = true
+  [privacy.twitter]
+    disable = true
+  [privacy.vimeo]
+    disable = true
+  [privacy.youtube]
+    disable = false
