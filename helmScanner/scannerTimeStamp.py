@@ -10,8 +10,13 @@ need assigning to a given run of helm-scanner.
 
 from datetime import datetime
 import os
+from helmScanner.utils.getArgs import args
 
-helmScannerArtifactTimestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+if args.timestamp != "NONE":
+    helmScannerArtifactTimestamp = str(args.timestamp)
+else:
+    helmScannerArtifactTimestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
 RESULTS_PATH = f'{os.path.abspath(os.path.curdir)}/results/{helmScannerArtifactTimestamp}'
 
 def currentRunTimestamp():
