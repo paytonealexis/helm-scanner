@@ -67,7 +67,7 @@ class ArtifactHubCrawler:
         totalPackages = 0
         reposPerRequest = 60 #API Limit
         start_record = int(args.start_record)
-        max_records = args.max_record
+        max_records = int(args.max_record)
         helmscanner_logging.info("Crawler: Artifacthub Helm crawler started.")
         try:
             currentRepo = 0
