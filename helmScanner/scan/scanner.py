@@ -437,7 +437,7 @@ class Scanner:
         #helmscanner_logging.debug(f"Global deps usage: {globalDepsUsage}")
         #helmscanner_logging.debug(f"Global deps list {globalDepsList}")
 
-        result_writer.print_csv(summary_lst, result_lst, helmdeps_lst, empty_resources, currentRunResultsPath, repo['name'], orgRepoFilename) #,globalDepsList, globalDepsUsage)
+        result_writer.print_csv(summary_lst, result_lst, helmdeps_lst, empty_resources, currentRunResultsPath, repo['name'], f"{repo['name']}-{chartPackage['name']}") #,globalDepsList, globalDepsUsage)
     #Upload and rename per org, rather than waiting till the end of the run.
     #uploadResultsPartial()
 
