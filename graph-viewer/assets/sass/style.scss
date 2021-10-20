@@ -137,7 +137,7 @@ p.lead, section, div.section {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1000px) {
   .navbar ul.nav > li {
     &.active > a, &.open > a, > a:hover {
       border-top-color: transparent;
@@ -331,7 +331,7 @@ p.lead, section, div.section {
     margin-bottom: 0;
   }
   h1 {
-    color: $black-main;
+    color: $white-main;
     text-transform: uppercase;
     font-size: 30px;
     font-weight: 700;
@@ -437,7 +437,7 @@ p.lead, section, div.section {
     margin-bottom: 10px;
     overflow: hidden;
     img {
-      width: 200px;
+      width: 400px;
       -webkit-transition: all 0.2s ease-out;
       -moz-transition: all 0.2s ease-out;
       transition: all 0.2s ease-out;
@@ -453,7 +453,7 @@ p.lead, section, div.section {
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1000px) {
   #graph-listing-medium .post .date-comments {
     text-align: right;
   }
@@ -551,20 +551,21 @@ p.lead, section, div.section {
 
 .navbar {
   position: relative;
-  min-height: 62px;
+  min-height: 100px;
   margin-bottom: 0;
   border-bottom: 1px solid transparent;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1000px) {
   .navbar {
     border-radius: 0px;
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1000px) {
   .navbar-header {
     float: left;
+    min-width: 300px;
   }
 }
 
@@ -577,7 +578,7 @@ p.lead, section, div.section {
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1000px) {
   .navbar-collapse {
     width: auto;
     border-top: 0;
@@ -599,7 +600,7 @@ p.lead, section, div.section {
   margin-left: -15px;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1000px) {
   .container > .navbar-header, .container-fluid > .navbar-header, .container > .navbar-collapse, .container-fluid > .navbar-collapse {
     margin-right: 0;
     margin-left: 0;
@@ -608,10 +609,11 @@ p.lead, section, div.section {
 
 .navbar-brand {
   float: left;
-  padding: 10px 15px;
+  padding: 5px 15px;
   font-size: 18px;
   line-height: 20px;
-  height: 62px;
+  height: 100px;
+  min-width: 200px;
   &:hover, &:focus {
     text-decoration: none;
   }
@@ -625,7 +627,7 @@ p.lead, section, div.section {
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1000px) {
   .navbar > {
     .container .navbar-brand, .container-fluid .navbar-brand {
       margin-left: -15px;
@@ -672,7 +674,7 @@ p.lead, section, div.section {
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1000px) {
   .navbar-nav {
     float: left;
     margin: 0;
@@ -689,7 +691,7 @@ p.lead, section, div.section {
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1000px) {
   .navbar-right {
     float: right !important;
   }

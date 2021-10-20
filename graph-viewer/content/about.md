@@ -7,15 +7,12 @@ type = "about"
 
 
 The purpose of Verummeum is to provide you with interesting articles about software development, open-source projects and online privacy. Most of these articles will have a focus on the Linux operating system. We hope you will enjoy the guides, reviews and opinion pieces about the latest developments in the software world. 
+This site is provided to easily search and view the infrastrucrutre as code “Blast Radius” graphs, produced by the [Helm-Scanner OSS codebase](https://github.com/bridgecrew/helm-scanner).
 
-Verummeum wants to provide a platform for interesting discussions amongst you, our dear readers. For this purpose a comment section is available under each article. 
+## More information
+Find the codebase on [Github](https://github.com/bridgecrew/helm-scanner) or carry on the conversation on our [#CodifiedSecurity Slack](https://slack.bridgecrew.io/).
 
-Because Verummeum believes in open source, the complete source code and all articles of Verummeum are available on [Github](https://github.com/PhilipVis/Verummeum), free to be used under the [CC BY-NC-SA 4.0 license](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+## Made by the Bridgecrew.io DevRel team
+Site built with Hugo using helm-scanner generated html graphs, theming and template based heavily on [Verummeum by PhilipVis](https://github.com/PhilipVis) with thanks for an awesomely simple OSS site with working indexable search!
 
-## About the author
-
-The creator and author of Verummeum is Philip Vissenaekens, a software developer with an interest in open source and Linux. In 2018, Philip decided to move over completely to Linux. He had been running both Windows and Linux in a dual boot setup for a very long time, and he had tested a number of different Linux distributions during that time. Because it took Philip a long time to make his transition to Linux, he decided to create Verummeum to help others with their transition of using proprietary software to open source alternatives. 
-
-### More information
-
-If you would like to find out more about me and my work, you can visit my [Linkedin](https://www.linkedIn.com/in/philipvissenaekens) and [Github](https://github.com/PhilipVis) profiles.
+Source available on [Github](https://github.com/bridgecrewio/helm-scanner), free to be used under the [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) license

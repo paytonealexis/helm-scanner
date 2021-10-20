@@ -8,7 +8,7 @@ disqusShortname = ""
 googleAnalytics = ""
 
 # Define the number of posts per page
-paginate = 5
+paginate = 50
 
 enableRobotsTXT = true
 
